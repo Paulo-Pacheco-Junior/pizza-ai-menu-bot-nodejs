@@ -3,11 +3,23 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+  "engines": {
+    "node": ">=18"
   },
-  "keywords": [],
-  "author": "",
+  "scripts": {
+    "dev": "tsx watch --env-file .env src/server.ts",
+    "test:dev": "NODE_OPTIONS=--experimental-vm-modules npx jest --watchAll --runInBand",
+    "build": "tsup src --out-dir build",
+    "start": "node build/server.js",
+    "commit": "cz",
+    "seed": "tsx prisma/seed.ts"
+  },
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-conventional-changelog"
+    }
+  },
+  "author": "Paulo Pacheco Júnior",
   "license": "ISC",
   "dependencies": {
     "@prisma/client": "^6.10.1",
