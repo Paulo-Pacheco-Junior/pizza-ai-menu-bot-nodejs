@@ -6,3 +6,26 @@ datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
 }
+
+enum Sender {
+  user
+  bot
+}
+model Message {
+  id        Int      @id @default(autoincrement())
+  content   String
+  sender    Sender
+  timestamp DateTime @default(now())
+}
+
+enum MenuType {
+  pizza
+  bebida
+  sobremesa
+}
+model MenuItem {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  type        MenuType
+  description String
+}
