@@ -1,0 +1,19 @@
+version: "3.8"
+
+services:
+  mysql:
+    image: bitnami/mysql:8.4
+    container_name: pizza_bot_mysql
+    restart: always
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_USER=mysql
+      - MYSQL_PASSWORD=mysql
+      - MYSQL_DATABASE=pizza_bot
+    volumes:
+      - mysql_data:/bitnami/mysql
+
+volumes:
+  mysql_data:

@@ -1,0 +1,17 @@
+# Dependências e build
+node_modules
+dist
+build
+
+# Variáveis de ambiente e logs
+.env
+npm-debug.log
+
+# Arquivos de configuração Docker
+Dockerfile
+docker-compose.yml
+
+# Git e arquivos de controle de versão
+.git
+.dockerignore
+.gitignore
