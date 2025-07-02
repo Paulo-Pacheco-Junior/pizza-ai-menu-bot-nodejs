@@ -11,8 +11,7 @@
     "test:dev": "NODE_OPTIONS=--experimental-vm-modules npx jest --watchAll --runInBand",
     "build": "tsup src --out-dir build",
     "start": "node build/server.js",
-    "commit": "cz",
-    "seed": "tsx prisma/seed.ts"
+    "commit": "cz"
   },
   "config": {
     "commitizen": {
@@ -22,6 +21,7 @@
   "author": "Paulo Pacheco Júnior",
   "license": "ISC",
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^6.10.1",
     "cors": "^2.8.5",
     "dotenv": "^17.0.0",
@@ -46,5 +46,8 @@
     "tsup": "^8.5.0",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   }
 }

@@ -13,7 +13,7 @@ enum Sender {
 }
 model Message {
   id        Int      @id @default(autoincrement())
-  content   String
+  content   String   @db.Text
   sender    Sender
   timestamp DateTime @default(now())
 }

@@ -1,27 +1,49 @@
 import { Server, Socket } from "socket.io";
 import { Sender } from "@prisma/client";
-import { prisma } from "../prisma/client";
+import { saveMessage } from "@/services/messageService";
+import { createChat, handleCustomResponse } from "../services/chatService";
 
-export function setupSocket(io: Server) {
+export function setupSocket(io: Server, geminiApiKey: string) {
+  const chat = createChat(geminiApiKey);
+
   io.on("connection", (socket: Socket) => {
-    console.log(`Cliente conectado: ${socket.id}`);
+    console.log(`[Socket] Cliente conectado: ${socket.id}`);
 
     socket.on("message", async (content: string) => {
-      await prisma.message.create({
-        data: { content, sender: Sender.user },
-      });
+      if (
+        !content ||
+        typeof content !== "string" ||
+        content.trim().length === 0
+      ) {
+        return socket.emit("response", "Mensagem inválida.");
+      }
 
-      const response = "testando a implementação do websocket...";
+      await saveMessage(content, Sender.user);
 
-      await prisma.message.create({
-        data: { content: response, sender: Sender.bot },
-      });
+      let botResponse = "Desculpe, não entendi. Pode repetir?";
 
-      socket.emit("response", response);
+      try {
+        const customResponse = await handleCustomResponse(content);
+
+        if (customResponse) {
+          botResponse = customResponse;
+        } else {
+          const sendMessage = await chat.sendMessage(content);
+          botResponse = sendMessage.response.text();
+        }
+      } catch (error) {
+        console.error("[Gemini] Erro ao gerar resposta:", error);
+        botResponse =
+          "Desculpe, houve um erro ao gerar a resposta. Tente novamente.";
+      }
+
+      await saveMessage(botResponse, Sender.bot);
+
+      socket.emit("response", botResponse);
     });
 
     socket.on("disconnect", () => {
-      console.log(`Cliente desconectado: ${socket.id}`);
+      console.log(`[Socket] Cliente desconectado: ${socket.id}`);
     });
   });
 }
