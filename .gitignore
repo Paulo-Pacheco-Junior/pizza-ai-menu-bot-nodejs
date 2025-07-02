@@ -19,7 +19,7 @@ yarn-error.log*
 
 # Prisma
 prisma/dev.db
-prisma/migrations/
+# prisma/migrations/
 
 # TypeScript
 *.tsbuildinfo
