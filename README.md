@@ -124,6 +124,6 @@ yarn dev
 docker-compose up --build
 ```
 
-### 3. O backend estará disponível em `http://localhost:3001`
+### 3. O backend estará disponível em `http://localhost:3333`
 
 Obs: O `docker-compose.yml` inclui os serviços de aplicação e banco de dados MySQL já configurados com Prisma.
