@@ -56,6 +56,7 @@ pizza-ai-menu-bot-nodejs/
 │   └── migrations/
 ├── src/
 │   ├── config/         # Configurações gerais
+│   ├── controllers/    # Lógica dos controllers
 │   ├── middlewares/    # Middlewares de tratamento de erros e outros
 │   ├── prisma/         # Instância do PrismaClient (client.ts)
 │   ├── routes/         # Rotas da API REST
