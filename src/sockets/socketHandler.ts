@@ -1,13 +1,19 @@
 import { Server, Socket } from "socket.io";
 import { Sender } from "@prisma/client";
 import { saveMessage } from "@/services/messageService";
-import { createChat, handleCustomResponse } from "../services/chatService";
+import { createChat, handleCustomResponse, OrderState } from "../services/chatService";
 
 export function setupSocket(io: Server, geminiApiKey: string) {
   const chat = createChat(geminiApiKey);
 
   io.on("connection", (socket: Socket) => {
     console.log(`[Socket] Cliente conectado: ${socket.id}`);
+
+    const orderState: OrderState = {
+      hasPizza: false,
+      hasBeverage: false,
+      hasDessert: false,
+    };
 
     socket.on("message", async (content: string) => {
       if (
@@ -23,7 +29,7 @@ export function setupSocket(io: Server, geminiApiKey: string) {
       let botResponse = "Desculpe, não entendi. Pode repetir?";
 
       try {
-        const customResponse = await handleCustomResponse(content);
+        const customResponse = await handleCustomResponse(content, orderState);
 
         if (customResponse) {
           botResponse = customResponse;
