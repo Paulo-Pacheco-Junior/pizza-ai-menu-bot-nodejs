@@ -1,8 +1,6 @@
-version: "3.8"
-
 services:
   mysql:
-    image: bitnami/mysql:8.4
+    image: bitnamilegacy/mysql:8.4
     container_name: pizza_bot_mysql
     restart: always
     ports:

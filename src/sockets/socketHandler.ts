@@ -1,21 +1,33 @@
 import { Server, Socket } from "socket.io";
 import { Sender } from "@prisma/client";
 import { saveMessage } from "@/services/messageService";
-import { createChat, handleCustomResponse, OrderState } from "../services/chatService";
+import { handleCustomResponse } from "../services/chatService";
+import { sessionManager } from "../services/sessionManager";
+
+interface MessagePayload {
+  content: string;
+  sessionId?: string;
+}
 
 export function setupSocket(io: Server, geminiApiKey: string) {
-  const chat = createChat(geminiApiKey);
-
   io.on("connection", (socket: Socket) => {
-    console.log(`[Socket] Cliente conectado: ${socket.id}`);
+    const handshakeSessionId =
+      (socket.handshake.auth?.sessionId as string) ||
+      socket.id;
 
-    const orderState: OrderState = {
-      hasPizza: false,
-      hasBeverage: false,
-      hasDessert: false,
-    };
+    socket.on("message", async (data: string | MessagePayload) => {
+      let content = "";
+      let currentSessionId = handshakeSessionId;
 
-    socket.on("message", async (content: string) => {
+      if (typeof data === "string") {
+        content = data;
+      } else if (data && typeof data === "object") {
+        content = data.content;
+        if (data.sessionId) {
+          currentSessionId = data.sessionId;
+        }
+      }
+
       if (
         !content ||
         typeof content !== "string" ||
@@ -24,17 +36,19 @@ export function setupSocket(io: Server, geminiApiKey: string) {
         return socket.emit("response", "Mensagem inválida.");
       }
 
-      await saveMessage(content, Sender.user);
+      const session = sessionManager.getOrCreateSession(currentSessionId, geminiApiKey);
+
+      await saveMessage(content, Sender.user, currentSessionId);
 
       let botResponse = "Desculpe, não entendi. Pode repetir?";
 
       try {
-        const customResponse = await handleCustomResponse(content, orderState);
+        const customResponse = await handleCustomResponse(content, session.orderState);
 
         if (customResponse) {
           botResponse = customResponse;
         } else {
-          const sendMessage = await chat.sendMessage(content);
+          const sendMessage = await session.chat.sendMessage(content);
           botResponse = sendMessage.response.text();
         }
       } catch (error) {
@@ -43,13 +57,9 @@ export function setupSocket(io: Server, geminiApiKey: string) {
           "Desculpe, houve um erro ao gerar a resposta. Tente novamente.";
       }
 
-      await saveMessage(botResponse, Sender.bot);
+      await saveMessage(botResponse, Sender.bot, currentSessionId);
 
       socket.emit("response", botResponse);
-    });
-
-    socket.on("disconnect", () => {
-      console.log(`[Socket] Cliente desconectado: ${socket.id}`);
     });
   });
 }

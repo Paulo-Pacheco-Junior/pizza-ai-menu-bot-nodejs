@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prisma } from "../prisma/client";
+import { MenuItem } from "@prisma/client";
 import { pizzaAssistantPrompt } from "./pizzaAssistantPrompt";
 
 export interface OrderState {
@@ -8,11 +9,29 @@ export interface OrderState {
   hasDessert: boolean;
 }
 
+let cachedMenuItems: MenuItem[] | null = null;
+let lastCacheTime = 0;
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutos
+
+async function getCachedMenu(): Promise<MenuItem[]> {
+  const now = Date.now();
+  if (!cachedMenuItems || now - lastCacheTime > CACHE_TTL_MS) {
+    try {
+      cachedMenuItems = await prisma.menuItem.findMany();
+      lastCacheTime = now;
+    } catch (err) {
+      console.error("[chatService] Erro ao carregar cardápio do banco:", err);
+      if (!cachedMenuItems) cachedMenuItems = [];
+    }
+  }
+  return cachedMenuItems;
+}
+
 export function createChat(apiKey: string) {
   const genAI = new GoogleGenerativeAI(apiKey);
 
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash",
+    model: "gemini-3.5-flash-lite",
     systemInstruction: pizzaAssistantPrompt,
   });
 
@@ -28,11 +47,10 @@ export async function handleCustomResponse(
 ): Promise<string | null> {
   const lower = content.toLowerCase();
 
-  const pizzas = await prisma.menuItem.findMany({ where: { type: "pizza" } });
-  const bebidas = await prisma.menuItem.findMany({ where: { type: "bebida" } });
-  const sobremesas = await prisma.menuItem.findMany({
-    where: { type: "sobremesa" },
-  });
+  const allItems = await getCachedMenu();
+  const pizzas = allItems.filter((i) => i.type === "pizza");
+  const bebidas = allItems.filter((i) => i.type === "bebida");
+  const sobremesas = allItems.filter((i) => i.type === "sobremesa");
 
   const bebidaNames = bebidas.map((b) => b.name.toLowerCase());
   const sobremesaNames = sobremesas.map((s) => s.name.toLowerCase());
