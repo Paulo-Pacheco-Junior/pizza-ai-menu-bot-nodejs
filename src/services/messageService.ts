@@ -14,3 +14,21 @@ export async function saveMessage(
     console.error("[MessageService] Erro ao salvar mensagem:", error);
   }
 }
+
+export async function getMessagesBySessionId(sessionId: string) {
+  try {
+    return await prisma.message.findMany({
+      where: { sessionId },
+      orderBy: { timestamp: "asc" },
+      select: {
+        id: true,
+        content: true,
+        sender: true,
+        timestamp: true,
+      },
+    });
+  } catch (error) {
+    console.error("[MessageService] Erro ao buscar historico por sessionId:", error);
+    return [];
+  }
+}

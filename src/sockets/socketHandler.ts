@@ -1,6 +1,6 @@
 import { Server, Socket } from "socket.io";
 import { Sender } from "@prisma/client";
-import { saveMessage } from "@/services/messageService";
+import { getMessagesBySessionId, saveMessage } from "@/services/messageService";
 import { handleCustomResponse } from "../services/chatService";
 import { sessionManager } from "../services/sessionManager";
 
@@ -10,10 +10,18 @@ interface MessagePayload {
 }
 
 export function setupSocket(io: Server, geminiApiKey: string) {
-  io.on("connection", (socket: Socket) => {
+  io.on("connection", async (socket: Socket) => {
     const handshakeSessionId =
       (socket.handshake.auth?.sessionId as string) ||
       socket.id;
+
+    // Hidrata o cliente com o histórico prévio da sessão caso exista
+    if (handshakeSessionId) {
+      const history = await getMessagesBySessionId(handshakeSessionId);
+      if (history.length > 0) {
+        socket.emit("history", history);
+      }
+    }
 
     socket.on("message", async (data: string | MessagePayload) => {
       let content = "";
