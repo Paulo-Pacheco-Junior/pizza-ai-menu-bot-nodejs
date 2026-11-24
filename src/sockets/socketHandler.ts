@@ -3,6 +3,7 @@ import { Sender } from "@prisma/client";
 import { getMessagesBySessionId, saveMessage } from "@/services/messageService";
 import { handleCustomResponse } from "../services/chatService";
 import { sessionManager } from "../services/sessionManager";
+import { idempotencyService } from "../services/idempotencyService";
 
 interface MessagePayload {
   messageId?: string;
@@ -11,11 +12,6 @@ interface MessagePayload {
 }
 
 const RESPONSE_TIMEOUT_MS = 20_000;
-
-// Cache de idempotência: respostas já processadas recentemente (TTL 2 minutos)
-const processedMessages = new Map<string, string>();
-// Conjunto de mensagens atualmente em processamento (evita requisições simultâneas em voo)
-const inFlightMessages = new Set<string>();
 
 async function withTimeout<T>(
   operation: Promise<T>,
@@ -76,18 +72,16 @@ export function setupSocket(io: Server, geminiApiKey: string) {
       }
 
       // 1. IDEMPOTÊNCIA: Se já foi respondida recentemente, devolve a mesma resposta
-      if (messageId && processedMessages.has(messageId)) {
+      if (messageId && idempotencyService.isProcessed(messageId)) {
         console.log(`[Idempotência] Reenviando resposta cacheada para messageId: ${messageId}`);
-        return socket.emit("response", processedMessages.get(messageId));
+        return socket.emit("response", idempotencyService.getResponse(messageId));
       }
 
       // 2. DEDUPLICAÇÃO DE VOO: Se já está sendo processada, ignora reenvio duplicado
-      if (messageId && inFlightMessages.has(messageId)) {
+      if (messageId && !idempotencyService.startProcessing(messageId)) {
         console.log(`[Idempotência] Mensagem ${messageId} já em voo. Ignorando duplicata.`);
         return;
       }
-
-      if (messageId) inFlightMessages.add(messageId);
 
       const session = sessionManager.getOrCreateSession(currentSessionId, geminiApiKey);
 
@@ -113,17 +107,16 @@ export function setupSocket(io: Server, geminiApiKey: string) {
           botResponse = sendMessage.response.text();
         }
 
-        // Armazena no cache de idempotência por 2 minutos
         if (messageId) {
-          processedMessages.set(messageId, botResponse);
-          setTimeout(() => processedMessages.delete(messageId!), 2 * 60 * 1000);
+          idempotencyService.finishProcessing(messageId, botResponse);
         }
       } catch (error) {
+        if (messageId) {
+          idempotencyService.cancelProcessing(messageId);
+        }
         console.error("[Gemini] Erro ao gerar resposta:", error);
         botResponse =
           "Desculpe, houve um erro ao gerar a resposta. Tente novamente.";
-      } finally {
-        if (messageId) inFlightMessages.delete(messageId);
       }
 
       void saveMessage(botResponse, Sender.bot, currentSessionId).catch((error) => {
