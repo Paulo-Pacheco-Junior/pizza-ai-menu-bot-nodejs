@@ -17,7 +17,7 @@ setupSocket(io, env.GEMINI_API_KEY!);
 
 const PORT = process.env.PORT || 3333;
 
-server.listen(process.env.PORT, () => {
+server.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
 
