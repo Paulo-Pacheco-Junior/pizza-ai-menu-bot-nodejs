@@ -24,9 +24,44 @@ enum MenuType {
   bebida
   sobremesa
 }
+
 model MenuItem {
   id          Int      @id @default(autoincrement())
   name        String   @unique
   type        MenuType
   description String
+  price       Float    @default(0.0)
+  items       OrderItem[]
+}
+
+model Order {
+  id            String      @id @default(uuid())
+  sessionId     String
+  status        String      @default("PENDING") // PENDING, CONFIRMED, PREPARING, DELIVERING, COMPLETED, CANCELLED
+  subtotal      Float       @default(0.0)
+  deliveryFee   Float       @default(0.0)
+  total         Float       @default(0.0)
+  paymentMethod String?     // PIX, CARD_DELIVERY, CASH
+  changeFor     Float?      // Troco
+  customerName  String?
+  customerPhone String?
+  address       String?     // Endereço completo
+  items         OrderItem[]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model OrderItem {
+  id          String   @id @default(uuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId  Int
+  menuItem    MenuItem @relation(fields: [menuItemId], references: [id])
+  quantity    Int      @default(1)
+  size        String?  // Broto, Média, Grande, Família
+  flavorHalf1 String?  // Meia sabor 1
+  flavorHalf2 String?  // Meia sabor 2
+  notes       String?  // Ex: "sem cebola"
+  unitPrice   Float
+  totalPrice  Float
 }
