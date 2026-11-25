@@ -60,6 +60,35 @@ export class OrderController {
     }
   }
 
+  async updateItemQuantity(req: Request, res: Response) {
+    try {
+      const sessionId = getSessionId(req);
+      if (!sessionId) {
+        return res.status(400).json({ error: "sessionId é obrigatório." });
+      }
+
+      const quantity = Number(req.body.quantity);
+      if (!Number.isInteger(quantity) || quantity < 1) {
+        return res.status(400).json({
+          error: "A quantidade deve ser um número inteiro maior que zero.",
+        });
+      }
+
+      const updatedOrder = await orderService.updateItemQuantity(
+        sessionId,
+        req.params.orderItemId,
+        quantity
+      );
+      if (!updatedOrder) {
+        return res.status(404).json({ error: "Item não encontrado no carrinho." });
+      }
+
+      return res.json(updatedOrder);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message });
+    }
+  }
+
   async updateDelivery(req: Request, res: Response) {
     try {
       const sessionId = getSessionId(req);

@@ -12,6 +12,9 @@ router.post("/cart/items", (req: Request, res: Response) => {
 router.delete("/cart/items", (req: Request, res: Response) => {
   orderController.removeItem(req, res);
 });
+router.put("/cart/items/:orderItemId", (req: Request, res: Response) => {
+  orderController.updateItemQuantity(req, res);
+});
 router.put("/cart/delivery", (req: Request, res: Response) => {
   orderController.updateDelivery(req, res);
 });

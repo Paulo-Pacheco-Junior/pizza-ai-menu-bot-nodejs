@@ -1,5 +1,9 @@
 import { prisma } from "../prisma/client";
 
+function normalizeOption(value?: string | null): string {
+  return value?.trim().toLocaleLowerCase("pt-BR") ?? "";
+}
+
 export class OrderService {
   /**
    * Obtém ou cria um pedido PENDING ativo para a sessionId
@@ -50,6 +54,10 @@ export class OrderService {
     flavorHalf2?: string,
     notes?: string
   ) {
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      throw new Error("A quantidade deve ser um número inteiro maior que zero.");
+    }
+
     const order = await this.getOrCreateCart(sessionId);
     const menuItem = await prisma.menuItem.findUnique({
       where: { id: menuItemId },
@@ -72,21 +80,51 @@ export class OrderService {
     }
 
     const unitPrice = Number((menuItem.price * multiplier).toFixed(2));
-    const totalPrice = Number((unitPrice * quantity).toFixed(2));
-
-    await prisma.orderItem.create({
-      data: {
+    const matchingItems = (await prisma.orderItem.findMany({
+      where: {
         orderId: order.id,
         menuItemId,
-        quantity,
-        size,
-        flavorHalf1,
-        flavorHalf2,
-        notes,
-        unitPrice,
-        totalPrice,
       },
-    });
+    })).filter(
+      (item) =>
+        normalizeOption(item.size) === normalizeOption(size) &&
+        normalizeOption(item.flavorHalf1) === normalizeOption(flavorHalf1) &&
+        normalizeOption(item.flavorHalf2) === normalizeOption(flavorHalf2) &&
+        normalizeOption(item.notes) === normalizeOption(notes)
+    );
+
+    if (matchingItems.length > 0) {
+      const [existingItem, ...duplicateItems] = matchingItems;
+      const updatedQuantity =
+        matchingItems.reduce((total, item) => total + item.quantity, 0) + quantity;
+      await prisma.orderItem.update({
+        where: { id: existingItem.id },
+        data: {
+          quantity: updatedQuantity,
+          unitPrice,
+          totalPrice: Number((unitPrice * updatedQuantity).toFixed(2)),
+        },
+      });
+      if (duplicateItems.length > 0) {
+        await prisma.orderItem.deleteMany({
+          where: { id: { in: duplicateItems.map((item) => item.id) } },
+        });
+      }
+    } else {
+      await prisma.orderItem.create({
+        data: {
+          orderId: order.id,
+          menuItemId,
+          quantity,
+          size,
+          flavorHalf1,
+          flavorHalf2,
+          notes,
+          unitPrice,
+          totalPrice: Number((unitPrice * quantity).toFixed(2)),
+        },
+      });
+    }
 
     return this.recalculateOrderTotals(order.id);
   }
@@ -97,6 +135,38 @@ export class OrderService {
       where: {
         id: orderItemId,
         orderId: order.id,
+      },
+    });
+
+    return this.recalculateOrderTotals(order.id);
+  }
+
+  async updateItemQuantity(
+    sessionId: string,
+    orderItemId: string,
+    quantity: number
+  ) {
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      throw new Error("A quantidade deve ser um número inteiro maior que zero.");
+    }
+
+    const order = await this.getOrCreateCart(sessionId);
+    const orderItem = await prisma.orderItem.findFirst({
+      where: {
+        id: orderItemId,
+        orderId: order.id,
+      },
+    });
+
+    if (!orderItem) {
+      return null;
+    }
+
+    await prisma.orderItem.update({
+      where: { id: orderItem.id },
+      data: {
+        quantity,
+        totalPrice: Number((orderItem.unitPrice * quantity).toFixed(2)),
       },
     });
 
