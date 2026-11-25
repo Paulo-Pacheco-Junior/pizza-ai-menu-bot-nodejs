@@ -34,11 +34,13 @@ async function withTimeout<T>(
   }
 }
 
+// Tipagem correta para Socket.IO ACK: callback(error, data)
+type MessageAck = (error: Error | null, response?: string) => void;
+
 export function setupSocket(io: Server, geminiApiKey: string) {
   io.on("connection", async (socket: Socket) => {
     const handshakeSessionId =
-      (socket.handshake.auth?.sessionId as string) ||
-      socket.id;
+      (socket.handshake.auth?.sessionId as string) || socket.id;
 
     // Hidrata o cliente com o histórico prévio da sessão caso exista
     if (handshakeSessionId) {
@@ -48,82 +50,95 @@ export function setupSocket(io: Server, geminiApiKey: string) {
       }
     }
 
-    socket.on("message", async (data: string | MessagePayload) => {
-      let content = "";
-      let currentSessionId = handshakeSessionId;
-      let messageId: string | undefined;
+    socket.on(
+      "message",
+      async (data: string | MessagePayload, ack?: MessageAck) => {
+        const reply = (msg: string) => {
+          if (typeof ack === "function") {
+            // ACK nativo do Socket.IO: (error, data)
+            ack(null, msg);
+          } else {
+            // Fallback para clientes legados sem ACK
+            socket.emit("response", msg);
+          }
+        };
 
-      if (typeof data === "string") {
-        content = data;
-      } else if (data && typeof data === "object") {
-        content = data.content;
-        messageId = data.messageId;
-        if (data.sessionId) {
-          currentSessionId = data.sessionId;
+        const replyError = (err: Error) => {
+          if (typeof ack === "function") {
+            ack(err);
+          } else {
+            socket.emit("response", "Desculpe, houve um erro. Tente novamente.");
+          }
+        };
+
+        let content = "";
+        let currentSessionId = handshakeSessionId;
+        let messageId: string | undefined;
+
+        if (typeof data === "string") {
+          content = data;
+        } else if (data && typeof data === "object") {
+          content = data.content;
+          messageId = data.messageId;
+          if (data.sessionId) {
+            currentSessionId = data.sessionId;
+          }
         }
-      }
 
-      if (
-        !content ||
-        typeof content !== "string" ||
-        content.trim().length === 0
-      ) {
-        return socket.emit("response", "Mensagem inválida.");
-      }
+        if (!content || typeof content !== "string" || content.trim().length === 0) {
+          return reply("Mensagem inválida.");
+        }
 
-      // 1. IDEMPOTÊNCIA: Se já foi respondida recentemente, devolve a mesma resposta
-      if (messageId && idempotencyService.isProcessed(messageId)) {
-        console.log(`[Idempotência] Reenviando resposta cacheada para messageId: ${messageId}`);
-        return socket.emit("response", idempotencyService.getResponse(messageId));
-      }
+        // 1. IDEMPOTÊNCIA: Se já foi respondida recentemente, devolve a mesma resposta
+        if (messageId && idempotencyService.isProcessed(messageId)) {
+          return reply(idempotencyService.getResponse(messageId)!);
+        }
 
-      // 2. DEDUPLICAÇÃO DE VOO: Se já está sendo processada, ignora reenvio duplicado
-      if (messageId && !idempotencyService.startProcessing(messageId)) {
-        console.log(`[Idempotência] Mensagem ${messageId} já em voo. Ignorando duplicata.`);
-        return;
-      }
+        // 2. DEDUPLICAÇÃO EM VOO: Se já está sendo processada, ignora reenvio duplicado
+        if (messageId && !idempotencyService.startProcessing(messageId)) {
+          return;
+        }
 
-      const session = sessionManager.getOrCreateSession(currentSessionId, geminiApiKey);
+        const session = sessionManager.getOrCreateSession(currentSessionId, geminiApiKey);
 
-      void saveMessage(content, Sender.user, currentSessionId).catch((error) => {
-        console.error("[MessageService] Falha ao salvar mensagem:", error);
-      });
+        void saveMessage(content, Sender.user, currentSessionId).catch((error) => {
+          console.error("[MessageService] Falha ao salvar mensagem:", error);
+        });
 
-      let botResponse = "Desculpe, não entendi. Pode repetir?";
-
-      try {
-        const customResponse = await withTimeout(
-          handleCustomResponse(content, session.orderState),
-          "Tempo limite ao consultar o cardápio"
-        );
-
-        if (customResponse) {
-          botResponse = customResponse;
-        } else {
-          const sendMessage = await withTimeout(
-            session.chat.sendMessage(content),
-            "Tempo limite ao consultar o atendimento"
+        try {
+          const customResponse = await withTimeout(
+            handleCustomResponse(content, session.orderState),
+            "O processamento do seu pedido demorou mais que o esperado. Por favor, tente novamente."
           );
-          botResponse = sendMessage.response.text();
-        }
 
-        if (messageId) {
-          idempotencyService.finishProcessing(messageId, botResponse);
+          let botResponse: string;
+          if (customResponse) {
+            botResponse = customResponse;
+          } else {
+            const result = await withTimeout(
+              session.chat.sendMessage(content),
+              "O atendimento demorou para responder. Por favor, tente novamente."
+            );
+            botResponse = result.response.text();
+          }
+
+          if (messageId) {
+            idempotencyService.finishProcessing(messageId, botResponse);
+          }
+
+          void saveMessage(botResponse, Sender.bot, currentSessionId).catch((error) => {
+            console.error("[MessageService] Falha ao salvar resposta:", error);
+          });
+
+          reply(botResponse);
+        } catch (error) {
+          if (messageId) {
+            idempotencyService.cancelProcessing(messageId);
+          }
+          console.error("[Gemini] Erro ao gerar resposta:", error);
+          replyError(new Error("Falha ao gerar resposta do assistente."));
         }
-      } catch (error) {
-        if (messageId) {
-          idempotencyService.cancelProcessing(messageId);
-        }
-        console.error("[Gemini] Erro ao gerar resposta:", error);
-        botResponse =
-          "Desculpe, houve um erro ao gerar a resposta. Tente novamente.";
       }
-
-      void saveMessage(botResponse, Sender.bot, currentSessionId).catch((error) => {
-        console.error("[MessageService] Falha ao salvar resposta:", error);
-      });
-
-      socket.emit("response", botResponse);
-    });
+    );
   });
 }
