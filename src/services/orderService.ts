@@ -58,6 +58,9 @@ export class OrderService {
     if (!menuItem) {
       throw new Error("Item do cardápio não encontrado.");
     }
+    if (!Number.isFinite(menuItem.price) || menuItem.price <= 0) {
+      throw new Error("O item não pode ser adicionado porque ainda não tem preço cadastrado.");
+    }
 
     // Calcular preço (ex: tamanho Grande +20%, Broto -20%, Família +20%, ou preço base)
     let multiplier = 1.0;

@@ -1,5 +1,7 @@
 import express from "express";
 import messageRoutes from "./routes/messageRoutes";
+import menuRoutes from "./routes/menuRoutes";
+import orderRoutes from "./routes/orderRoutes";
 import storeRoutes from "./routes/storeRoutes";
 import { errorHandler } from "./middlewares/errorHandler";
 import cors from "cors";
@@ -12,6 +14,8 @@ app.use(cors());
 app.use(express.json());
 
 app.use(messageRoutes);
+app.use(menuRoutes);
+app.use(orderRoutes);
 app.use(storeRoutes);
 
 app.use(errorHandler);
